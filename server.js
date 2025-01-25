@@ -1,3 +1,5 @@
+//server.js
+
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
@@ -30,6 +32,8 @@ app.use(
 // Static file serving
 app.use('/profile_images', express.static(path.join(__dirname, 'public/profile_images')));
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
+app.use('/recipe_images', express.static(path.join(__dirname, 'public/recipe_images_user')));
+
 
 // Serve the index.html file as a landing page
 app.get("/", (req, res) => {
