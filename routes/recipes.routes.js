@@ -522,8 +522,12 @@ router.get('/stats/:id', (req, res) => {
   });
 });
 
+
+
+
+
 // Route to create a new recipe by a user
-router.post('/create-recipe', isAuthenticated, (req, res) => {
+router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
   const { 
     food_name, 
     description, 
@@ -645,7 +649,7 @@ router.post('/create-recipe', isAuthenticated, (req, res) => {
 
 
 // Route to get all recipes created by the authenticated user
-router.get('/all-user-recipes', isAuthenticated, (req, res) => {
+router.get('/user-recipe/all', isAuthenticated, (req, res) => {
   const userId = req.user.id; // Assuming `req.user` contains the authenticated user's information
 
   // SQL query to get all recipes created by the user, including only the required fields and images
@@ -763,7 +767,114 @@ router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
   });
 });
 
+// Route to search recipes by food name for the authenticated user
+router.get('/user-recipe/search-recipes', isAuthenticated, (req, res) => {
+  const userId = req.user.id; // Authenticated user's ID
+  const { food_name } = req.query; // Extract the search term from query parameters
 
+  // Validate that a search term is provided
+  if (!food_name) {
+    return res.status(400).send({ error: "Food name is required for searching" });
+  }
+
+  // SQL query to search recipes by food name for the authenticated user
+  const query = `
+    SELECT 
+      ur.id AS recipe_id,
+      ur.food_name,
+      ur.description,
+      ur.total_cook_time,
+      ur.difficulty,
+      (SELECT GROUP_CONCAT(image_url SEPARATOR ', ') 
+       FROM user_recipe_images 
+       WHERE recipe_id = ur.id) AS images
+    FROM user_recipes ur
+    WHERE ur.user_id = ? AND ur.food_name LIKE ?
+  `;
+
+  // Use a wildcard search for the food name
+  const searchTerm = `%${food_name}%`;
+
+  // Execute the query
+  db.query(query, [userId, searchTerm], (err, recipes) => {
+    if (err) {
+      console.error("Error searching for recipes:", err);
+      return res.status(500).send({ error: "Error searching for recipes" });
+    }
+
+    if (recipes.length === 0) {
+      return res.status(404).send({ error: "No recipes found matching the search term" });
+    }
+
+    // Format the results before sending the response
+    const formattedRecipes = recipes.map(recipe => ({
+      recipe_id: recipe.recipe_id,
+      food_name: recipe.food_name,
+      description: recipe.description,
+      total_cook_time: recipe.total_cook_time,
+      difficulty: recipe.difficulty,
+      images: recipe.images ? recipe.images.split(', ') : [] // Include the images in the response
+    }));
+
+    // Send the formatted results
+    res.send(formattedRecipes);
+  });
+});
+
+// Route to delete a recipe created by the authenticated user
+router.delete('/user-recipe/delete-recipe/:id', isAuthenticated, (req, res) => {
+  const recipeId = req.params.id; // Get the recipe ID from the route parameter
+  const userId = req.user.id; // Get the authenticated user's ID
+
+  // Check if the recipe exists and belongs to the user
+  const checkQuery = `
+    SELECT id 
+    FROM user_recipes 
+    WHERE id = ? AND user_id = ?
+  `;
+
+  db.query(checkQuery, [recipeId, userId], (err, results) => {
+    if (err) {
+      console.error("Error checking recipe ownership:", err);
+      return res.status(500).send({ error: "Error checking recipe ownership" });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).send({ error: "Recipe not found or not authorized to delete" });
+    }
+
+    // Delete the recipe and all related data
+    const deleteQueries = [
+      `DELETE FROM user_recipe_ingredients WHERE recipe_id = ?`,
+      `DELETE FROM user_cooking_instructions WHERE recipe_id = ?`,
+      `DELETE FROM user_nutritional_content WHERE recipe_id = ?`,
+      `DELETE FROM user_recipe_images WHERE recipe_id = ?`,
+      `DELETE FROM user_recipes WHERE id = ?`
+    ];
+
+    // Use Promise.all to execute all delete queries
+    const deletePromises = deleteQueries.map(query => {
+      return new Promise((resolve, reject) => {
+        db.query(query, [recipeId], (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      });
+    });
+
+    Promise.all(deletePromises)
+      .then(() => {
+        res.send({ message: "Recipe deleted successfully" });
+      })
+      .catch(err => {
+        console.error("Error deleting recipe data:", err);
+        res.status(500).send({ error: "Error deleting recipe data" });
+      });
+  });
+});
 
 // Export the router
 module.exports = router;
