@@ -16,7 +16,8 @@ router.get('/recipe-name-search', (req, res) => {
     SELECT 
       fi.id AS food_id,
       fi.food_name,
-      fi.description
+      fi.description,
+      fi.category -- Include category in the query
     FROM food_information fi
     WHERE fi.food_name LIKE ?
     GROUP BY fi.id;
@@ -34,16 +35,18 @@ router.get('/recipe-name-search', (req, res) => {
       return res.status(404).send({ error: "No food items found matching the search criteria" });
     }
 
-    // Map results to include only food_name and description
+    // Map results to include category in the response
     const formattedResults = searchResults.map(food => ({
       id: food.food_id,
       food_name: food.food_name,
       description: food.description,
+      category: food.category || null, // Include category or null if not available
     }));
 
     res.send(formattedResults);
   });
 });
+
   
 
 router.get('/all', (req, res) => {
@@ -104,7 +107,7 @@ router.get('/all', (req, res) => {
         ingredient_quantities: food.ingredient_quantities ? food.ingredient_quantities.split(', ') : [],
         instructions: food.instructions ? food.instructions.split(' | ') : [],
         nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
-        image_url: food.image_url ? `http://192.168.128.245:6000${food.image_url}` : null,
+        image_url: food.image_url ? `http://192.168.195.245:6000${food.image_url}` : null,
         caption: food.caption || null
       }));
   
@@ -189,7 +192,7 @@ router.get('/all', (req, res) => {
             instructions: food.instructions ? food.instructions.split(' | ') : [],
             nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
             images: imageResults.map(img => ({
-              image_url: `http://192.168.128.245:6000${img.image_url}`,
+              image_url: `http://192.168.195.245:6000${img.image_url}`,
               caption: img.caption || null
             }))
           };
@@ -294,7 +297,7 @@ router.post("/save-recipe", isAuthenticated, (req, res) => {
         // Map images by food_id for easier access
         const imagesByFoodId = imageResults.reduce((acc, image) => {
           acc[image.food_id] = {
-            image_url: `http://192.168.128.245:6000${image.image_url}`,
+            image_url: `http://192.168.195.245:6000${image.image_url}`,
             caption: image.caption || null
           };
           return acc;
@@ -694,7 +697,6 @@ router.get('/user-recipe/all', isAuthenticated, (req, res) => {
 });
 
 
-// Route to get a single recipe by ID
 router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
   const recipeId = req.params.id; // Get the recipe ID from the route parameter
   const userId = req.user.id; // Ensure the user is authorized to view their recipe
@@ -702,25 +704,18 @@ router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
   // SQL query to retrieve a single recipe, including its related data
   const query = `
     SELECT 
-      ur.id AS recipe_id,
       ur.food_name,
       ur.description,
       ur.servings,
       ur.category,
-      ur.likes,
-      ur.dislikes,
-      ur.created_at,
       ur.total_cook_time,
       ur.difficulty,
       ur.preparation_tips,
       ur.nutritional_paragraph,
-      GROUP_CONCAT(DISTINCT uri.ingredient_name SEPARATOR ', ') AS ingredients,
-      GROUP_CONCAT(DISTINCT uri.quantity SEPARATOR ', ') AS ingredient_quantities,
+      GROUP_CONCAT(DISTINCT uri.ingredient_name SEPARATOR ' | ') AS ingredients,
+      GROUP_CONCAT(DISTINCT uri.quantity SEPARATOR ' | ') AS ingredient_quantities,
       GROUP_CONCAT(DISTINCT uci.step_number, '. ', uci.instruction SEPARATOR ' | ') AS instructions,
-      GROUP_CONCAT(DISTINCT unc.nutrient_name, ': ', unc.amount SEPARATOR ', ') AS nutritional_content,
-      (SELECT GROUP_CONCAT(image_url SEPARATOR ', ') 
-       FROM user_recipe_images 
-       WHERE recipe_id = ur.id) AS images
+      GROUP_CONCAT(DISTINCT unc.nutrient_name, ':', unc.amount SEPARATOR ' | ') AS nutritional_content
     FROM user_recipes ur
     LEFT JOIN user_recipe_ingredients uri ON ur.id = uri.recipe_id
     LEFT JOIN user_cooking_instructions uci ON ur.id = uci.recipe_id
@@ -740,32 +735,35 @@ router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
       return res.status(404).send({ error: "Recipe not found or not authorized" });
     }
 
-    // Format the recipe details before sending the response
+    // Extract recipe data
     const recipe = results[0];
+
+    // Format the response properly
     const formattedRecipe = {
-      recipe_id: recipe.recipe_id,
       food_name: recipe.food_name,
       description: recipe.description,
-      servings: recipe.servings,
+      servings: parseInt(recipe.servings, 10) || 0,
       category: recipe.category,
-      likes: recipe.likes || 0,
-      dislikes: recipe.dislikes || 0,
-      created_at: recipe.created_at,
+      ingredients: recipe.ingredients ? recipe.ingredients.split(' | ') : [],
+      quantities: recipe.ingredient_quantities ? recipe.ingredient_quantities.split(' | ') : [],
+      instructions: recipe.instructions ? recipe.instructions.split(' | ') : [],
+      nutritional_content: recipe.nutritional_content
+        ? recipe.nutritional_content.split(' | ').map((item) => {
+            const [name, amount] = item.split(':'); // Split by ':' to separate name and amount
+            return { name: name.trim(), amount: amount.trim() }; // Format into object
+          })
+        : [],
       total_cook_time: recipe.total_cook_time,
       difficulty: recipe.difficulty,
       preparation_tips: recipe.preparation_tips,
-      nutritional_paragraph: recipe.nutritional_paragraph,
-      ingredients: recipe.ingredients ? recipe.ingredients.split(', ') : [],
-      ingredient_quantities: recipe.ingredient_quantities ? recipe.ingredient_quantities.split(', ') : [],
-      instructions: recipe.instructions ? recipe.instructions.split(' | ') : [],
-      nutritional_content: recipe.nutritional_content ? recipe.nutritional_content.split(', ') : [],
-      images: recipe.images ? recipe.images.split(', ') : [] // Include image URLs
+      nutritional_paragraph: recipe.nutritional_paragraph
     };
 
-    // Send the formatted recipe data
+    // Send the formatted response
     res.send(formattedRecipe);
   });
 });
+
 
 // Route to search recipes by food name for the authenticated user
 router.get('/user-recipe/search-recipes', isAuthenticated, (req, res) => {
