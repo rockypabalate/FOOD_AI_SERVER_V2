@@ -546,10 +546,10 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
     nutritional_paragraph    
   } = req.body;
 
-  // Validate input data
-  if (!food_name || !description || !ingredients || !quantities || !instructions || !nutritional_content || 
+  // Validate required input data
+  if (!food_name || !description || !ingredients || !quantities || !instructions || 
       !total_cook_time || !difficulty || !preparation_tips || !nutritional_paragraph) {
-    return res.status(400).send({ error: "All fields are required" });
+    return res.status(400).send({ error: "Required fields are missing" });
   }
 
   // User ID (from the authenticated user)
@@ -604,22 +604,25 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
       });
     });
 
-    // Step 4: Insert nutritional content for the new recipe
-    const nutritionalQueries = nutritional_content.map((nutrient) => {
-      return new Promise((resolve, reject) => {
-        const nutrientQuery = `
-          INSERT INTO user_nutritional_content (recipe_id, nutrient_name, amount)
-          VALUES (?, ?, ?)
-        `;
-        db.query(nutrientQuery, [recipeId, nutrient.name, nutrient.amount], (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
+    // Step 4: Insert nutritional content for the new recipe if provided
+    let nutritionalQueries = [];
+    if (nutritional_content && Array.isArray(nutritional_content)) {
+      nutritionalQueries = nutritional_content.map((nutrient) => {
+        return new Promise((resolve, reject) => {
+          const nutrientQuery = `
+            INSERT INTO user_nutritional_content (recipe_id, nutrient_name, amount)
+            VALUES (?, ?, ?)
+          `;
+          db.query(nutrientQuery, [recipeId, nutrient.name, nutrient.amount], (err) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
         });
       });
-    });
+    }
 
     // Step 5: Wait for all database operations to finish
     Promise.all([...ingredientQueries, ...instructionQueries, ...nutritionalQueries])
@@ -628,6 +631,7 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
         res.send({
           message: "Recipe created successfully",
           recipe: {
+            id: recipeId, // Include the recipe ID in the response
             food_name: food_name,
             description: description,
             servings: servings,
@@ -635,7 +639,7 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
             ingredients: ingredients,
             quantities: quantities,
             instructions: instructions,
-            nutritional_content: nutritional_content,
+            nutritional_content: nutritional_content || [], // Return an empty array if not provided
             total_cook_time: total_cook_time,
             difficulty: difficulty,
             preparation_tips: preparation_tips,
@@ -649,6 +653,8 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
       });
   });
 });
+
+
 
 
 // Route to get all recipes created by the authenticated user
