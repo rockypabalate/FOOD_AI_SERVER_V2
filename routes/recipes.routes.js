@@ -107,7 +107,7 @@ router.get('/all', (req, res) => {
         ingredient_quantities: food.ingredient_quantities ? food.ingredient_quantities.split(', ') : [],
         instructions: food.instructions ? food.instructions.split(' | ') : [],
         nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
-        image_url: food.image_url ? `http://192.168.195.245:6000${food.image_url}` : null,
+        image_url: food.image_url ? `http://192.168.93.245:6000${food.image_url}` : null,
         caption: food.caption || null
       }));
   
@@ -192,7 +192,7 @@ router.get('/all', (req, res) => {
             instructions: food.instructions ? food.instructions.split(' | ') : [],
             nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
             images: imageResults.map(img => ({
-              image_url: `http://192.168.195.245:6000${img.image_url}`,
+              image_url: `http://192.168.93.245:6000${img.image_url}`,
               caption: img.caption || null
             }))
           };
@@ -297,7 +297,7 @@ router.post("/save-recipe", isAuthenticated, (req, res) => {
         // Map images by food_id for easier access
         const imagesByFoodId = imageResults.reduce((acc, image) => {
           acc[image.food_id] = {
-            image_url: `http://192.168.195.245:6000${image.image_url}`,
+            image_url: `http://192.168.93.245:6000${image.image_url}`,
             caption: image.caption || null
           };
           return acc;
@@ -546,10 +546,10 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
     nutritional_paragraph    
   } = req.body;
 
-  // Validate input data
-  if (!food_name || !description || !ingredients || !quantities || !instructions || !nutritional_content || 
+  // Validate required input data
+  if (!food_name || !description || !ingredients || !quantities || !instructions || 
       !total_cook_time || !difficulty || !preparation_tips || !nutritional_paragraph) {
-    return res.status(400).send({ error: "All fields are required" });
+    return res.status(400).send({ error: "Required fields are missing" });
   }
 
   // User ID (from the authenticated user)
@@ -604,22 +604,25 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
       });
     });
 
-    // Step 4: Insert nutritional content for the new recipe
-    const nutritionalQueries = nutritional_content.map((nutrient) => {
-      return new Promise((resolve, reject) => {
-        const nutrientQuery = `
-          INSERT INTO user_nutritional_content (recipe_id, nutrient_name, amount)
-          VALUES (?, ?, ?)
-        `;
-        db.query(nutrientQuery, [recipeId, nutrient.name, nutrient.amount], (err) => {
-          if (err) {
-            reject(err);
-          } else {
-            resolve();
-          }
+    // Step 4: Insert nutritional content for the new recipe if provided
+    let nutritionalQueries = [];
+    if (nutritional_content && Array.isArray(nutritional_content)) {
+      nutritionalQueries = nutritional_content.map((nutrient) => {
+        return new Promise((resolve, reject) => {
+          const nutrientQuery = `
+            INSERT INTO user_nutritional_content (recipe_id, nutrient_name, amount)
+            VALUES (?, ?, ?)
+          `;
+          db.query(nutrientQuery, [recipeId, nutrient.name, nutrient.amount], (err) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
         });
       });
-    });
+    }
 
     // Step 5: Wait for all database operations to finish
     Promise.all([...ingredientQueries, ...instructionQueries, ...nutritionalQueries])
@@ -628,6 +631,7 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
         res.send({
           message: "Recipe created successfully",
           recipe: {
+            id: recipeId, // Include the recipe ID in the response
             food_name: food_name,
             description: description,
             servings: servings,
@@ -635,7 +639,7 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
             ingredients: ingredients,
             quantities: quantities,
             instructions: instructions,
-            nutritional_content: nutritional_content,
+            nutritional_content: nutritional_content || [], // Return an empty array if not provided
             total_cook_time: total_cook_time,
             difficulty: difficulty,
             preparation_tips: preparation_tips,
@@ -651,11 +655,11 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
 });
 
 
-// Route to get all recipes created by the authenticated user
+
+
 router.get('/user-recipe/all', isAuthenticated, (req, res) => {
   const userId = req.user.id; // Assuming `req.user` contains the authenticated user's information
 
-  // SQL query to get all recipes created by the user, including only the required fields and images
   const query = `
     SELECT 
       ur.id AS recipe_id,
@@ -663,104 +667,106 @@ router.get('/user-recipe/all', isAuthenticated, (req, res) => {
       ur.description,
       ur.total_cook_time,
       ur.difficulty,
-      (SELECT GROUP_CONCAT(image_url SEPARATOR ', ') 
-       FROM user_recipe_images 
-       WHERE recipe_id = ur.id) AS images
+      GROUP_CONCAT(uri.image_url SEPARATOR ', ') AS images
     FROM user_recipes ur
-    WHERE ur.user_id = ?;
+    LEFT JOIN user_recipe_images uri ON ur.id = uri.recipe_id
+    WHERE ur.user_id = ?
+    GROUP BY ur.id;
   `;
 
-  // Query the database to fetch the recipes
   db.query(query, [userId], (err, recipes) => {
-    if (err) {
-      console.error("Error fetching user's recipes:", err);
-      return res.status(500).send({ error: "Error fetching user's recipes" });
-    }
+      if (err) {
+          console.error("Error fetching user's recipes:", err);
+          return res.status(500).send({ error: "Error fetching user's recipes" });
+      }
 
-    if (recipes.length === 0) {
-      return res.status(404).send({ error: "No recipes found for this user" });
-    }
+      if (recipes.length === 0) {
+          return res.status(404).send({ error: "No recipes found for this user" });
+      }
 
-    // Format the results before sending them to the client
-    const formattedRecipes = recipes.map(recipe => ({
-      recipe_id: recipe.recipe_id,
-      food_name: recipe.food_name,
-      description: recipe.description,
-      total_cook_time: recipe.total_cook_time,
-      difficulty: recipe.difficulty,
-      images: recipe.images ? recipe.images.split(', ') : [] // Include the images in the response
-    }));
+      const formattedRecipes = recipes.map(recipe => ({
+          recipe_id: recipe.recipe_id,
+          food_name: recipe.food_name,
+          description: recipe.description,
+          total_cook_time: recipe.total_cook_time || null,
+          difficulty: recipe.difficulty || null,
+          images: recipe.images 
+              ? recipe.images.split(', ').map(img => `http://192.168.93.245:6000${img}`) 
+              : [] // Format images with base URL
+      }));
 
-    // Return the formatted results
-    res.send(formattedRecipes);
+      res.send(formattedRecipes);
   });
 });
+
 
 
 router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
   const recipeId = req.params.id; // Get the recipe ID from the route parameter
   const userId = req.user.id; // Ensure the user is authorized to view their recipe
-
-  // SQL query to retrieve a single recipe, including its related data
   const query = `
-    SELECT 
-      ur.food_name,
-      ur.description,
-      ur.servings,
-      ur.category,
-      ur.total_cook_time,
-      ur.difficulty,
-      ur.preparation_tips,
-      ur.nutritional_paragraph,
-      GROUP_CONCAT(DISTINCT uri.ingredient_name SEPARATOR ' | ') AS ingredients,
-      GROUP_CONCAT(DISTINCT uri.quantity SEPARATOR ' | ') AS ingredient_quantities,
-      GROUP_CONCAT(DISTINCT uci.step_number, '. ', uci.instruction SEPARATOR ' | ') AS instructions,
-      GROUP_CONCAT(DISTINCT unc.nutrient_name, ':', unc.amount SEPARATOR ' | ') AS nutritional_content
-    FROM user_recipes ur
-    LEFT JOIN user_recipe_ingredients uri ON ur.id = uri.recipe_id
-    LEFT JOIN user_cooking_instructions uci ON ur.id = uci.recipe_id
-    LEFT JOIN user_nutritional_content unc ON ur.id = unc.recipe_id
-    WHERE ur.id = ? AND ur.user_id = ?
-    GROUP BY ur.id;
+      SELECT 
+          ur.id AS id,  -- ✅ Include recipe ID
+          ur.food_name,
+          ur.description,
+          ur.servings,
+          ur.category,
+          ur.total_cook_time,
+          ur.difficulty,
+          ur.preparation_tips,
+          ur.nutritional_paragraph,
+          GROUP_CONCAT(DISTINCT uri.ingredient_name SEPARATOR ' | ') AS ingredients,
+          GROUP_CONCAT(DISTINCT uri.quantity SEPARATOR ' | ') AS ingredient_quantities,
+          GROUP_CONCAT(DISTINCT uci.step_number, '. ', uci.instruction SEPARATOR ' | ') AS instructions,
+          GROUP_CONCAT(DISTINCT unc.nutrient_name, ':', unc.amount SEPARATOR ' | ') AS nutritional_content,
+          GROUP_CONCAT(DISTINCT urimg.image_url SEPARATOR ', ') AS images
+      FROM user_recipes ur
+      LEFT JOIN user_recipe_ingredients uri ON ur.id = uri.recipe_id
+      LEFT JOIN user_cooking_instructions uci ON ur.id = uci.recipe_id
+      LEFT JOIN user_nutritional_content unc ON ur.id = unc.recipe_id
+      LEFT JOIN user_recipe_images urimg ON ur.id = urimg.recipe_id
+      WHERE ur.id = ? AND ur.user_id = ?
+      GROUP BY ur.id;
   `;
 
-  // Query the database to fetch the recipe by ID
   db.query(query, [recipeId, userId], (err, results) => {
-    if (err) {
-      console.error("Error fetching the recipe:", err);
-      return res.status(500).send({ error: "Error fetching the recipe" });
-    }
+      if (err) {
+          console.error("Error fetching the recipe:", err);
+          return res.status(500).send({ error: "Error fetching the recipe" });
+      }
 
-    if (results.length === 0) {
-      return res.status(404).send({ error: "Recipe not found or not authorized" });
-    }
+      if (results.length === 0) {
+          return res.status(404).send({ error: "Recipe not found or not authorized" });
+      }
 
-    // Extract recipe data
-    const recipe = results[0];
+      const recipe = results[0];
 
-    // Format the response properly
-    const formattedRecipe = {
-      food_name: recipe.food_name,
-      description: recipe.description,
-      servings: parseInt(recipe.servings, 10) || 0,
-      category: recipe.category,
-      ingredients: recipe.ingredients ? recipe.ingredients.split(' | ') : [],
-      quantities: recipe.ingredient_quantities ? recipe.ingredient_quantities.split(' | ') : [],
-      instructions: recipe.instructions ? recipe.instructions.split(' | ') : [],
-      nutritional_content: recipe.nutritional_content
-        ? recipe.nutritional_content.split(' | ').map((item) => {
-            const [name, amount] = item.split(':'); // Split by ':' to separate name and amount
-            return { name: name.trim(), amount: amount.trim() }; // Format into object
-          })
-        : [],
-      total_cook_time: recipe.total_cook_time,
-      difficulty: recipe.difficulty,
-      preparation_tips: recipe.preparation_tips,
-      nutritional_paragraph: recipe.nutritional_paragraph
-    };
+      // ✅ Add the `id` field in the response
+      const formattedRecipe = {
+          id: recipe.id, // ✅ Include recipe ID
+          food_name: recipe.food_name,
+          description: recipe.description,
+          servings: parseInt(recipe.servings, 10) || 0,
+          category: recipe.category,
+          ingredients: recipe.ingredients ? recipe.ingredients.split(' | ') : [],
+          quantities: recipe.ingredient_quantities ? recipe.ingredient_quantities.split(' | ') : [],
+          instructions: recipe.instructions ? recipe.instructions.split(' | ') : [],
+          nutritional_content: recipe.nutritional_content
+              ? recipe.nutritional_content.split(' | ').map((item) => {
+                  const [name, amount] = item.split(':');
+                  return { name: name.trim(), amount: amount.trim() };
+              })
+              : [],
+          total_cook_time: recipe.total_cook_time,
+          difficulty: recipe.difficulty,
+          preparation_tips: recipe.preparation_tips,
+          nutritional_paragraph: recipe.nutritional_paragraph,
+          images: recipe.images 
+              ? recipe.images.split(', ').map(img => `http://192.168.93.245:6000${img}`)
+              : []
+      };
 
-    // Send the formatted response
-    res.send(formattedRecipe);
+      res.send(formattedRecipe);
   });
 });
 

@@ -105,7 +105,7 @@ router.get("/current-user", isAuthenticated, (req, res) => {
     const userDetails = results[0];
 
     // Modify the profile_image URL as per the requirement
-    const baseUrl = process.env.BASE_URL || 'http://192.168.195.245:6000';
+    const baseUrl = process.env.BASE_URL || 'http://192.168.93.245:6000';
 
     // Construct the responseData object
     const responseData = {
