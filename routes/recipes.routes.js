@@ -107,7 +107,7 @@ router.get('/all', (req, res) => {
         ingredient_quantities: food.ingredient_quantities ? food.ingredient_quantities.split(', ') : [],
         instructions: food.instructions ? food.instructions.split(' | ') : [],
         nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
-        image_url: food.image_url ? `http://192.168.93.245:6000${food.image_url}` : null,
+        image_url: food.image_url ? `http://192.168.19.245:6000${food.image_url}` : null,
         caption: food.caption || null
       }));
   
@@ -192,7 +192,7 @@ router.get('/all', (req, res) => {
             instructions: food.instructions ? food.instructions.split(' | ') : [],
             nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
             images: imageResults.map(img => ({
-              image_url: `http://192.168.93.245:6000${img.image_url}`,
+              image_url: `http://192.168.19.245:6000${img.image_url}`,
               caption: img.caption || null
             }))
           };
@@ -297,7 +297,7 @@ router.post("/save-recipe", isAuthenticated, (req, res) => {
         // Map images by food_id for easier access
         const imagesByFoodId = imageResults.reduce((acc, image) => {
           acc[image.food_id] = {
-            image_url: `http://192.168.93.245:6000${image.image_url}`,
+            image_url: `http://192.168.19.245:6000${image.image_url}`,
             caption: image.caption || null
           };
           return acc;
@@ -691,7 +691,7 @@ router.get('/user-recipe/all', isAuthenticated, (req, res) => {
           total_cook_time: recipe.total_cook_time || null,
           difficulty: recipe.difficulty || null,
           images: recipe.images 
-              ? recipe.images.split(', ').map(img => `http://192.168.93.245:6000${img}`) 
+              ? recipe.images.split(', ').map(img => `http://192.168.19.245:6000${img}`) 
               : [] // Format images with base URL
       }));
 
@@ -706,7 +706,7 @@ router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
   const userId = req.user.id; // Ensure the user is authorized to view their recipe
   const query = `
       SELECT 
-          ur.id AS id,  -- ✅ Include recipe ID
+          ur.id AS id, 
           ur.food_name,
           ur.description,
           ur.servings,
@@ -762,7 +762,7 @@ router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
           preparation_tips: recipe.preparation_tips,
           nutritional_paragraph: recipe.nutritional_paragraph,
           images: recipe.images 
-              ? recipe.images.split(', ').map(img => `http://192.168.93.245:6000${img}`)
+              ? recipe.images.split(', ').map(img => `http://192.168.19.245:6000${img}`)
               : []
       };
 
