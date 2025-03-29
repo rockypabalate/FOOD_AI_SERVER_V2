@@ -1,7 +1,7 @@
 // auth.routes.js under the folder routes
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const db = require("../database/db");
+const { promisePool } = require('../database/db');
 const imagesRoutes = require('./images.routes');
 const { uploadProfile } = require("../routes/images.routes"); 
 const { isAuthenticated } = require('../middleware/auth.middleware');
@@ -13,119 +13,120 @@ router.post("/register", async (req, res) => {
   const { email, password, username } = req.body;
 
   if (!email || !password || !username) {
-    return res.status(400).send({ error: "Please fill in all fields" });
+      return res.status(400).send({ error: "Please fill in all fields" });
   }
 
-  if (password.length < 1) {
-    return res.status(400).send({ error: "Password must be at least 1 character long" });
+  if (password.length < 6) {
+      return res.status(400).send({ error: "Password must be at least 6 character long" });
   }
 
-  const checkQuery = "SELECT * FROM users WHERE email = ?";
-  db.query(checkQuery, [email], async (err, results) => {
-    if (err) {
-      console.error("Error checking email existence:", err);
-      return res.status(500).send({ error: "Failed to register user" });
-    }
-    if (results.length > 0) {
-      return res.status(400).send({ error: "Email already exists" });
-    }
+  try {
+      // Check if the email already exists
+      const checkQuery = "SELECT * FROM users WHERE email = ?";
+      const [results] = await promisePool.query(checkQuery, [email]);
 
-    try {
+      if (results.length > 0) {
+          return res.status(400).send({ error: "Email already exists" });
+      }
+
+      // Hash the password
       const hashedPassword = await bcrypt.hash(password, 10);
-      const insertQuery = "INSERT INTO users (email, password, username) VALUES (?, ?, ?)";
 
-      db.query(insertQuery, [email, hashedPassword, username], (err, results) => {
-        if (err) {
-          console.error("Error registering user:", err);
-          return res.status(500).send({ error: "Failed to register user" });
-        }
-        req.session.email = email;
-        res.send({ message: "User registered successfully" });
-      });
-    } catch (error) {
-      console.error("Error hashing password:", error);
-      return res.status(500).send({ error: "Failed to register user" });
-    }
-  });
+      // Insert the new user
+      const insertQuery = "INSERT INTO users (email, password, username) VALUES (?, ?, ?)";
+      await promisePool.query(insertQuery, [email, hashedPassword, username]);
+
+      // Store session email
+      req.session.email = email;
+      res.send({ message: "User registered successfully" });
+
+  } catch (error) {
+      console.error("Error during registration:", error);
+      res.status(500).send({ error: "Failed to register user" });
+  }
 });
 
+
 // Login
-router.post("/login", (req, res) => {
+router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).send({ error: "Please fill in all fields" });
+      return res.status(400).send({ error: "Please fill in all fields" });
   }
 
-  const query = "SELECT * FROM users WHERE email = ?";
-  db.query(query, [email], async (err, results) => {
-    if (err) {
-      console.error("Error retrieving user for login:", err);
-      return res.status(500).send({ error: "Failed to login user" });
-    }
+  try {
+      // Fetch the user from the database
+      const query = "SELECT * FROM users WHERE email = ?";
+      const [results] = await promisePool.query(query, [email]);
 
-    if (results.length === 0) {
-      return res.status(401).send({ error: "Invalid email or password" });
-    }
+      if (results.length === 0) {
+          return res.status(401).send({ error: "Invalid email or password" });
+      }
 
-    const user = results[0];
+      const user = results[0];
 
-    try {
+      // Compare the entered password with the hashed password
       const isMatch = await bcrypt.compare(password, user.password);
 
       if (!isMatch) {
-        return res.status(401).send({ error: "Invalid email or password" });
+          return res.status(401).send({ error: "Invalid email or password" });
       }
 
+      // Store session data
       req.session.email = email;
+
       res.send({ message: "User logged in successfully", token: req.sessionID });
-    } catch (error) {
+
+  } catch (error) {
       console.error("Error during login process:", error);
       return res.status(500).send({ error: "Failed to login user" });
-    }
-  });
+  }
 });
+
 
 // Get Current User
-router.get("/current-user", isAuthenticated, (req, res) => {
+router.get("/current-user", isAuthenticated, async (req, res) => {
   const user = req.user;
 
-  const query = "SELECT id, email, username, created_at, profile_image FROM users WHERE id = ?";
-  db.query(query, [user.id], (err, results) => {
-    if (err) {
-      console.error("Error retrieving user:", err);
+  try {
+      const query = "SELECT id, email, username, created_at, profile_image FROM users WHERE id = ?";
+      const [results] = await promisePool.query(query, [user.id]);
+
+      if (results.length === 0) {
+          return res.status(404).send({ error: "User not found" });
+      }
+
+      const userDetails = results[0];
+      const baseUrl = process.env.BASE_URL || 'https://food-ai-server-v2.onrender.com';
+
+      const responseData = {
+          user: {
+              id: userDetails.id,
+              email: userDetails.email,
+              username: userDetails.username,
+              created_at: userDetails.created_at,
+              profile_image: userDetails.profile_image
+                  ? `${baseUrl}${userDetails.profile_image}`
+                  : null,
+          },
+      };
+
+      res.send(responseData);
+
+  } catch (error) {
+      console.error("Error retrieving user:", error);
       return res.status(500).send({ error: "Failed to retrieve user" });
-    }
-
-    if (results.length === 0) {
-      return res.status(404).send({ error: "User not found" });
-    }
-
-    const userDetails = results[0];
-    const baseUrl = process.env.BASE_URL || 'http://192.168.111.245:6000';
-
-    const responseData = {
-      user: {
-        id: userDetails.id,
-        email: userDetails.email,
-        username: userDetails.username,
-        created_at: userDetails.created_at,
-        profile_image: userDetails.profile_image
-          ? `${baseUrl}${userDetails.profile_image}`
-          : null,
-      },
-    };
-
-    res.send(responseData);
-  });
+  }
 });
+
 
 // Update Profile
 router.put(
   '/update-profile',
   isAuthenticated,
   uploadProfile.single('profileImage'),
-  (req, res) => {
+  async (req, res) => {
     const { username } = req.body;
     
     console.log('Request Body:', req.body);
@@ -151,12 +152,8 @@ router.put(
 
     const updateQuery = `UPDATE users SET ${updateFields} WHERE email = ?`;
 
-    db.query(updateQuery, values, (err) => {
-      if (err) {
-        console.error('Error updating user profile:', err);
-        return res.status(500).send({ error: 'Failed to update profile' });
-      }
-
+    try {
+      await promisePool.query(updateQuery, values);
       console.log('Profile updated successfully:', fieldsToUpdate);
 
       const successMessage = {
@@ -168,9 +165,13 @@ router.put(
       };
 
       res.send(successMessage);
-    });
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      return res.status(500).send({ error: 'Failed to update profile' });
+    }
   }
 );
+
 
 
 // Logout route
