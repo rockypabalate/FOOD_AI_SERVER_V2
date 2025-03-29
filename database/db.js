@@ -3,11 +3,11 @@ require('dotenv').config();
 
 // MySQL connection setup
 const db = mysql.createConnection({
-  host: '192.185.48.158',
-  user: 'bisublar_foodai',
-  password: 'Fo0d4ai2025',
-  database: 'bisublar_foodai',
- // port: 3307 
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT || 3306
 });
 
 db.connect(err => {
@@ -19,5 +19,3 @@ db.connect(err => {
 });
 
 module.exports = db;
-
-
