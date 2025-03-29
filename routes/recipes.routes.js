@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database/db');
 const { isAuthenticated } = require('../middleware/auth.middleware');
-const { promisePool } = require('../config/db');
+const { promisePool } = require('../database/db');
 
 
 router.get('/recipe-name-search', (req, res) => {
