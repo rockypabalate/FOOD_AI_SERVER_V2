@@ -52,37 +52,46 @@ router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-      return res.status(400).send({ error: "Please fill in all fields" });
+    return res.status(400).send({ error: "Please fill in all fields" });
   }
 
   try {
-      // Fetch the user from the database
-      const query = "SELECT * FROM users WHERE email = ?";
-      const [results] = await promisePool.query(query, [email]);
+    // Fetch user from database
+    const query = "SELECT * FROM users WHERE email = ?";
+    const [results] = await promisePool.query(query, [email]);
 
-      if (results.length === 0) {
-          return res.status(401).send({ error: "Invalid email or password" });
-      }
+    if (results.length === 0) {
+      return res.status(401).send({ error: "Invalid email or password" });
+    }
 
-      const user = results[0];
+    const user = results[0];
 
-      // Compare the entered password with the hashed password
-      const isMatch = await bcrypt.compare(password, user.password);
+    // Compare password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).send({ error: "Invalid email or password" });
+    }
 
-      if (!isMatch) {
-          return res.status(401).send({ error: "Invalid email or password" });
-      }
+    if (!req.session) {
+      console.error("Session is not initialized");
+      return res.status(500).send({ error: "Session error" });
+    }
 
-      // Store session data
-      req.session.email = email;
+    // Store user in session
+    req.session.user = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+    };
 
-      res.send({ message: "User logged in successfully", token: req.sessionID });
+    res.send({ message: "User logged in successfully", token: req.sessionID });
 
   } catch (error) {
-      console.error("Error during login process:", error);
-      return res.status(500).send({ error: "Failed to login user" });
+    console.error("Error during login process:", error);
+    return res.status(500).send({ error: "Failed to login user" });
   }
 });
+
 
 
 // Get Current User
