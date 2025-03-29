@@ -88,10 +88,9 @@ router.post("/login", (req, res) => {
 
 // Get Current User
 router.get("/current-user", isAuthenticated, (req, res) => {
-  // At this point, the middleware has already validated the session and attached user data to req.user
   const user = req.user;
 
-  const query = "SELECT * FROM users WHERE id = ?";
+  const query = "SELECT id, email, username, created_at, profile_image FROM users WHERE id = ?";
   db.query(query, [user.id], (err, results) => {
     if (err) {
       console.error("Error retrieving user:", err);
@@ -103,11 +102,8 @@ router.get("/current-user", isAuthenticated, (req, res) => {
     }
 
     const userDetails = results[0];
+    const baseUrl = process.env.BASE_URL || 'http://192.168.111.245:6000';
 
-    // Modify the profile_image URL as per the requirement
-    const baseUrl = process.env.BASE_URL || 'http://192.168.128.245:6000';
-
-    // Construct the responseData object
     const responseData = {
       user: {
         id: userDetails.id,
@@ -117,52 +113,34 @@ router.get("/current-user", isAuthenticated, (req, res) => {
         profile_image: userDetails.profile_image
           ? `${baseUrl}${userDetails.profile_image}`
           : null,
-        bio: userDetails.bio,
-        favorite_recipe: userDetails.favorite_recipe,
-        dietary_preference: userDetails.dietary_preference,
-        address: userDetails.address,
-        role: userDetails.role,
       },
     };
 
-    // Send the structured response
     res.send(responseData);
   });
 });
 
-
-
+// Update Profile
 router.put(
   '/update-profile',
-  isAuthenticated, // Check if the user is authenticated
-  uploadProfile.single('profileImage'), // Multer middleware for file uploads
+  isAuthenticated,
+  uploadProfile.single('profileImage'),
   (req, res) => {
-    const { username, bio, favorite_recipe, address, dietary_preference, role } = req.body;
-
+    const { username } = req.body;
+    
     console.log('Request Body:', req.body);
     console.log('Uploaded File:', req.file);
 
-    if (!req.file) {
-      console.warn('No file was uploaded');
+    if (!req.file && !username) {
+      return res.status(400).send({ error: 'No fields to update' });
     }
 
     const email = req.user.email;
-
     const fieldsToUpdate = {};
 
     if (username) fieldsToUpdate.username = username;
-    if (bio) fieldsToUpdate.bio = bio;
-    if (favorite_recipe) fieldsToUpdate.favorite_recipe = favorite_recipe;
-    if (address) fieldsToUpdate.address = address;
-    if (dietary_preference) fieldsToUpdate.dietary_preference = dietary_preference;
-    if (role) fieldsToUpdate.role = role;
-
     if (req.file) {
       fieldsToUpdate.profile_image = `/profile_images/${req.file.filename}`;
-    }
-
-    if (Object.keys(fieldsToUpdate).length === 0) {
-      return res.status(400).send({ error: 'No fields to update' });
     }
 
     const updateFields = Object.keys(fieldsToUpdate)
@@ -179,8 +157,7 @@ router.put(
         return res.status(500).send({ error: 'Failed to update profile' });
       }
 
-      console.log('Profile updated successfully:');
-      console.log(`Updated Fields: ${JSON.stringify(fieldsToUpdate)}`);
+      console.log('Profile updated successfully:', fieldsToUpdate);
 
       const successMessage = {
         message: 'Profile updated successfully',
@@ -190,12 +167,11 @@ router.put(
           : null,
       };
 
-      console.log('Debug Response:', successMessage);
-
       res.send(successMessage);
     });
   }
 );
+
 
 // Logout route
 router.post('/logout', (req, res) => {
