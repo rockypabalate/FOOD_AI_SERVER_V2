@@ -1,6 +1,4 @@
-// auth.middleware.js under the folder middleware
 const db = require("../database/db");
-
 
 const isAuthenticated = (req, res, next) => {
     const authHeader = req.headers["authorization"];
@@ -9,33 +7,30 @@ const isAuthenticated = (req, res, next) => {
         return res.status(401).send({ error: "Authorization token is required" });
     }
 
-    // Check if the header contains "Bearer" and extract the token
     const parts = authHeader.split(" ");
     if (parts.length !== 2 || parts[0] !== "Bearer") {
         return res.status(401).send({ error: "Invalid authorization format" });
     }
 
-    const sessionId = parts[1]; // Extract the token after "Bearer"
+    const sessionId = parts[1];
 
-    // Ensure sessionStore exists
-    if (!req.sessionStore) {
+    if (!req.session || !req.sessionStore) {  // Ensure session is initialized
         return res.status(500).send({ error: "Session store not initialized" });
     }
 
-    // Retrieve session using sessionId
     req.sessionStore.get(sessionId, (err, session) => {
         if (err) {
             console.error("Error retrieving session:", err);
             return res.status(500).send({ error: "Internal server error" });
         }
 
-        if (!session || !session.email) {
+        if (!session || !session.user || !session.user.email) { 
             return res.status(401).send({ error: "Invalid session or session expired" });
         }
         
-        // Query to validate user existence
+        // Validate user existence
         const query = "SELECT id FROM users WHERE email = ?";
-        db.query(query, [session.email], (err, results) => {
+        db.query(query, [session.user.email], (err, results) => {
             if (err) {
                 console.error("Database error:", err);
                 return res.status(500).send({ error: "Failed to verify user" });
@@ -46,11 +41,10 @@ const isAuthenticated = (req, res, next) => {
             }
 
             // Attach user data to req.user for downstream use
-            req.user = { id: results[0].id, email: session.email };
+            req.user = { id: results[0].id, email: session.user.email };
             next();
         });
     });
 };
-
 
 module.exports = { isAuthenticated };
