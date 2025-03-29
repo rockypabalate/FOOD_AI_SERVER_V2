@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database/db');
 const { isAuthenticated } = require('../middleware/auth.middleware');
+const { promisePool } = require('../config/db');
 
 
 router.get('/recipe-name-search', (req, res) => {
@@ -49,71 +50,74 @@ router.get('/recipe-name-search', (req, res) => {
 
   
 
-router.get('/all', (req, res) => {
-    const foodQuery = `
-      SELECT 
-        fi.id AS food_id,
-        fi.food_name,
-        fi.description,
-        fi.serving_size,
-        fi.total_cook_time,
-        fi.difficulty,
-        fi.category,
-        fi.views,
-        fi.likes,
-        fi.preparation_tips,
-        fi.nutritional_paragraph,
-        fi.author, 
-        fi.recipe_featured,
-        GROUP_CONCAT(DISTINCT ri.ingredient_name SEPARATOR ', ') AS ingredients,
-        GROUP_CONCAT(DISTINCT ri.quantity SEPARATOR ', ') AS ingredient_quantities,
-        GROUP_CONCAT(DISTINCT ci.step_number, '. ', ci.instruction SEPARATOR ' | ') AS instructions,
-        GROUP_CONCAT(DISTINCT nc.nutrient_name, ': ', nc.amount SEPARATOR ', ') AS nutritional_content,
-        fi_img.image_url,
-        fi_img.caption
-      FROM food_information fi
-      LEFT JOIN recipe_ingredients ri ON fi.id = ri.food_id
-      LEFT JOIN cooking_instructions ci ON fi.id = ci.food_id
-      LEFT JOIN nutritional_content nc ON fi.id = nc.food_id
-      LEFT JOIN food_images fi_img ON fi.id = fi_img.food_id
-      GROUP BY fi.id;
-    `;
-  
-    db.query(foodQuery, (err, foodResults) => {
-      if (err) {
-        console.error("Error fetching all food information:", err);
-        return res.status(500).send({ error: "Error fetching food information" });
+    router.get('/all', async (req, res) => {
+      const foodQuery = `
+        SELECT 
+          fi.id AS food_id,
+          fi.food_name,
+          fi.description,
+          fi.serving_size,
+          fi.total_cook_time,
+          fi.difficulty,
+          fi.category,
+          fi.views,
+          fi.likes,
+          fi.preparation_tips,
+          fi.nutritional_paragraph,
+          fi.author, 
+          fi.recipe_featured,
+          GROUP_CONCAT(DISTINCT ri.ingredient_name SEPARATOR ', ') AS ingredients,
+          GROUP_CONCAT(DISTINCT ri.quantity SEPARATOR ', ') AS ingredient_quantities,
+          GROUP_CONCAT(DISTINCT ci.step_number, '. ', ci.instruction SEPARATOR ' | ') AS instructions,
+          GROUP_CONCAT(DISTINCT nc.nutrient_name, ': ', nc.amount SEPARATOR ', ') AS nutritional_content,
+          fi_img.image_url,
+          fi_img.caption
+        FROM food_information fi
+        LEFT JOIN recipe_ingredients ri ON fi.id = ri.food_id
+        LEFT JOIN cooking_instructions ci ON fi.id = ci.food_id
+        LEFT JOIN nutritional_content nc ON fi.id = nc.food_id
+        LEFT JOIN food_images fi_img ON fi.id = fi_img.food_id
+        GROUP BY fi.id;
+      `;
+
+      try {
+        // Use promise-based query execution
+        const [foodResults] = await promisePool.query(foodQuery);
+
+        if (foodResults.length === 0) {
+          return res.status(404).json({ error: "No food information found" });
+        }
+
+        const formattedResults = foodResults.map(food => ({
+          id: food.food_id,
+          food_name: food.food_name,
+          description: food.description,
+          serving_size: food.serving_size,
+          total_cook_time: food.total_cook_time || null,
+          difficulty: food.difficulty || null,
+          category: food.category || null,
+          views: food.views || 0,
+          likes: food.likes || 0,
+          preparation_tips: food.preparation_tips || null,
+          nutritional_paragraph: food.nutritional_paragraph || null,
+          author: food.author || null,
+          recipe_featured: food.recipe_featured || '0',
+          ingredients: food.ingredients ? food.ingredients.split(', ') : [],
+          ingredient_quantities: food.ingredient_quantities ? food.ingredient_quantities.split(', ') : [],
+          instructions: food.instructions ? food.instructions.split(' | ') : [],
+          nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
+          image_url: food.image_url ? `https://food-ai-server-v2.onrender.com${food.image_url}` : null,
+          caption: food.caption || null
+        }));
+
+        res.json(formattedResults);
+      } catch (error) {
+        console.error("Error fetching all food information:", error);
+        res.status(500).json({ error: "Database error" });
       }
-  
-      if (foodResults.length === 0) {
-        return res.status(404).send({ error: "No food information found" });
-      }
-  
-      const formattedResults = foodResults.map(food => ({
-        id: food.food_id,
-        food_name: food.food_name,
-        description: food.description,
-        serving_size: food.serving_size,
-        total_cook_time: food.total_cook_time || null,
-        difficulty: food.difficulty || null,
-        category: food.category || null,
-        views: food.views || 0,
-        likes: food.likes || 0,
-        preparation_tips: food.preparation_tips || null,
-        nutritional_paragraph: food.nutritional_paragraph || null,
-        author: food.author || null,
-        recipe_featured: food.recipe_featured || '0',
-        ingredients: food.ingredients ? food.ingredients.split(', ') : [],
-        ingredient_quantities: food.ingredient_quantities ? food.ingredient_quantities.split(', ') : [],
-        instructions: food.instructions ? food.instructions.split(' | ') : [],
-        nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
-        image_url: food.image_url ? `http://192.168.111.245:6000${food.image_url}` : null,
-        caption: food.caption || null
-      }));
-  
-      res.send(formattedResults);
     });
-  });
+
+    module.exports = router;
   
 
 
