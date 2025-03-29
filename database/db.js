@@ -21,24 +21,34 @@
 // module.exports = db;
 
 
-const mysql = require('mysql2');
-require('dotenv').config();
+const session = require('express-session');
+const MySQLStore = require('express-mysql-session')(session);
 
-// MySQL connection setup
-const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME
+// Database connection options
+const dbOptions = {
+    host: process.env.DB_HOST || 'your-mysql-host',
+    user: process.env.DB_USER || 'your-mysql-user',
+    password: process.env.DB_PASSWORD || 'your-mysql-password',
+    database: process.env.DB_NAME || 'your-database-name',
+    port: process.env.DB_PORT || 3306,
+    clearExpired: true, // Automatically removes expired sessions
+    checkExpirationInterval: 900000, // 15 minutes
+    expiration: 86400000, // 24 hours
+};
+
+const sessionStore = new MySQLStore(dbOptions);
+
+const sessionMiddleware = session({
+    key: 'session_id',
+    secret: 'food_ai_database',
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: false, // Set to true if using HTTPS
+        httpOnly: true,
+        maxAge: 86400000, // 24 hours
+    },
 });
 
-db.connect(err => {
-  if (err) {
-    console.error('Database connection failed:', err);
-  } else {
-    console.log('Connected to MySQL database');
-  }
-});
-
-module.exports = db;
+module.exports = sessionMiddleware;

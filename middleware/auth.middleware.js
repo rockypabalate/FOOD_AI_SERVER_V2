@@ -1,6 +1,7 @@
 // auth.middleware.js under the folder middleware
 const db = require("../database/db");
 
+
 const isAuthenticated = (req, res, next) => {
     const authHeader = req.headers["authorization"];
 
