@@ -22,45 +22,13 @@ app.use(cors({ origin: "*", credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// MySQL Session Store
-const dbOptions = {
-  host: process.env.DB_HOST || "your-mysql-host",
-  user: process.env.DB_USER || "your-mysql-user",
-  password: process.env.DB_PASSWORD || "your-mysql-password",
-  database: process.env.DB_NAME || "your-database-name",
-  port: process.env.DB_PORT || 3306,
-  clearExpired: true,
-  checkExpirationInterval: 900000, // 15 mins
-  expiration: 86400000, // 24 hours
-};
 
-const sessionStore = new MySQLStore(dbOptions);
-
-// Session Middleware
-app.use(
-  session({
-    key: "session_id",
-    secret: process.env.SESSION_SECRET || "mysecretkey",
-    store: sessionStore,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      secure: process.env.NODE_ENV === "production", // Set true in production with HTTPS
-      httpOnly: true,
-      maxAge: 86400000, // 24 hours
-    },
-  })
-);
 
 // Static File Serving
 app.use("/profile_images", express.static(path.join(__dirname, "public/profile_images")));
 app.use("/images", express.static(path.join(__dirname, "public/images")));
 app.use("/recipe_images", express.static(path.join(__dirname, "public/recipe_images_user")));
 
-// Serve Landing Page
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "views", "index.html"));
-});
 
 // Routes
 app.use("/auth", authRoutes);
