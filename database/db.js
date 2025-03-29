@@ -26,10 +26,10 @@ const MySQLStore = require('express-mysql-session')(session);
 
 // Database connection options
 const dbOptions = {
-    host: process.env.DB_HOST || 'your-mysql-host',
-    user: process.env.DB_USER || 'your-mysql-user',
-    password: process.env.DB_PASSWORD || 'your-mysql-password',
-    database: process.env.DB_NAME || 'your-database-name',
+    host: process.env.DB_HOST || 'shinkansen.proxy.rlwy.net',
+    user: process.env.DB_USER || '27700',
+    password: process.env.DB_PASSWORD || 'xyUMsPMhoDeKaWhDYhADqhbMXIpSSMag',
+    database: process.env.DB_NAME || 'railway',
     port: process.env.DB_PORT || 3306,
     clearExpired: true, // Automatically removes expired sessions
     checkExpirationInterval: 900000, // 15 minutes
