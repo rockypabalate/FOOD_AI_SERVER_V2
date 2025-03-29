@@ -102,7 +102,7 @@ router.get("/current-user", isAuthenticated, (req, res) => {
     }
 
     const userDetails = results[0];
-    const baseUrl = process.env.BASE_URL || 'http://192.168.19.245:6000';
+    const baseUrl = process.env.BASE_URL || 'http://192.168.111.245:6000';
 
     const responseData = {
       user: {

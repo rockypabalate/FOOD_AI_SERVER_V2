@@ -107,7 +107,7 @@ router.get('/all', (req, res) => {
         ingredient_quantities: food.ingredient_quantities ? food.ingredient_quantities.split(', ') : [],
         instructions: food.instructions ? food.instructions.split(' | ') : [],
         nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
-        image_url: food.image_url ? `http://192.168.19.245:6000${food.image_url}` : null,
+        image_url: food.image_url ? `http://192.168.111.245:6000${food.image_url}` : null,
         caption: food.caption || null
       }));
   
@@ -192,7 +192,7 @@ router.get('/all', (req, res) => {
             instructions: food.instructions ? food.instructions.split(' | ') : [],
             nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
             images: imageResults.map(img => ({
-              image_url: `http://192.168.19.245:6000${img.image_url}`,
+              image_url: `http://192.168.111.245:6000${img.image_url}`,
               caption: img.caption || null
             }))
           };
@@ -297,7 +297,7 @@ router.post("/save-recipe", isAuthenticated, (req, res) => {
         // Map images by food_id for easier access
         const imagesByFoodId = imageResults.reduce((acc, image) => {
           acc[image.food_id] = {
-            image_url: `http://192.168.19.245:6000${image.image_url}`,
+            image_url: `http://192.168.111.245:6000${image.image_url}`,
             caption: image.caption || null
           };
           return acc;
@@ -539,30 +539,39 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
     ingredients, 
     quantities, 
     instructions, 
-    nutritional_content, 
     total_cook_time,          
     difficulty,               
     preparation_tips,         
     nutritional_paragraph    
   } = req.body;
 
-  // Validate required input data
+  // Validate required input data (nutritional_paragraph removed from required fields)
   if (!food_name || !description || !ingredients || !quantities || !instructions || 
-      !total_cook_time || !difficulty || !preparation_tips || !nutritional_paragraph) {
+      !total_cook_time || !difficulty || !preparation_tips) {
     return res.status(400).send({ error: "Required fields are missing" });
   }
 
   // User ID (from the authenticated user)
   const userId = req.user.id;
 
-  // Step 1: Insert the new recipe into the user_recipes table (including new fields)
+  // Step 1: Insert the new recipe into the user_recipes table
   const recipeQuery = `
     INSERT INTO user_recipes 
     (user_id, food_name, description, servings, category, total_cook_time, difficulty, preparation_tips, nutritional_paragraph)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
 
-  db.query(recipeQuery, [userId, food_name, description, servings, category, total_cook_time, difficulty, preparation_tips, nutritional_paragraph], (err, result) => {
+  db.query(recipeQuery, [
+    userId, 
+    food_name, 
+    description, 
+    servings, 
+    category, 
+    total_cook_time, 
+    difficulty, 
+    preparation_tips, 
+    nutritional_paragraph ?? '' // Default to empty string if not provided
+  ], (err, result) => {
     if (err) {
       console.error("Error inserting new recipe:", err);
       return res.status(500).send({ error: "Error inserting recipe" });
@@ -604,28 +613,8 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
       });
     });
 
-    // Step 4: Insert nutritional content for the new recipe if provided
-    let nutritionalQueries = [];
-    if (nutritional_content && Array.isArray(nutritional_content)) {
-      nutritionalQueries = nutritional_content.map((nutrient) => {
-        return new Promise((resolve, reject) => {
-          const nutrientQuery = `
-            INSERT INTO user_nutritional_content (recipe_id, nutrient_name, amount)
-            VALUES (?, ?, ?)
-          `;
-          db.query(nutrientQuery, [recipeId, nutrient.name, nutrient.amount], (err) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve();
-            }
-          });
-        });
-      });
-    }
-
-    // Step 5: Wait for all database operations to finish
-    Promise.all([...ingredientQueries, ...instructionQueries, ...nutritionalQueries])
+    // Step 4: Wait for all database operations to finish
+    Promise.all([...ingredientQueries, ...instructionQueries])
       .then(() => {
         // After all data is inserted, send the response with the full recipe details
         res.send({
@@ -639,11 +628,10 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
             ingredients: ingredients,
             quantities: quantities,
             instructions: instructions,
-            nutritional_content: nutritional_content || [], // Return an empty array if not provided
             total_cook_time: total_cook_time,
             difficulty: difficulty,
             preparation_tips: preparation_tips,
-            nutritional_paragraph: nutritional_paragraph
+            nutritional_paragraph: nutritional_paragraph ?? '' // Return empty if not provided
           }
         });
       })
@@ -653,7 +641,6 @@ router.post('/user-recipe/create-recipe', isAuthenticated, (req, res) => {
       });
   });
 });
-
 
 
 
@@ -691,7 +678,7 @@ router.get('/user-recipe/all', isAuthenticated, (req, res) => {
           total_cook_time: recipe.total_cook_time || null,
           difficulty: recipe.difficulty || null,
           images: recipe.images 
-              ? recipe.images.split(', ').map(img => `http://192.168.19.245:6000${img}`) 
+              ? recipe.images.split(', ').map(img => `http://192.168.111.245:6000${img}`) 
               : [] // Format images with base URL
       }));
 
@@ -702,8 +689,9 @@ router.get('/user-recipe/all', isAuthenticated, (req, res) => {
 
 
 router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
-  const recipeId = req.params.id; // Get the recipe ID from the route parameter
-  const userId = req.user.id; // Ensure the user is authorized to view their recipe
+  const recipeId = req.params.id;
+  const userId = req.user.id;
+
   const query = `
       SELECT 
           ur.id AS id, 
@@ -715,15 +703,12 @@ router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
           ur.difficulty,
           ur.preparation_tips,
           ur.nutritional_paragraph,
-          GROUP_CONCAT(DISTINCT uri.ingredient_name SEPARATOR ' | ') AS ingredients,
-          GROUP_CONCAT(DISTINCT uri.quantity SEPARATOR ' | ') AS ingredient_quantities,
-          GROUP_CONCAT(DISTINCT uci.step_number, '. ', uci.instruction SEPARATOR ' | ') AS instructions,
-          GROUP_CONCAT(DISTINCT unc.nutrient_name, ':', unc.amount SEPARATOR ' | ') AS nutritional_content,
+          GROUP_CONCAT(DISTINCT CONCAT('{ "name": "', uri.ingredient_name, '", "quantity": "', uri.quantity, '" }') SEPARATOR ', ') AS ingredients,
+          GROUP_CONCAT(DISTINCT CONCAT('{ "step_number": "', uci.step_number, '", "instruction": "', uci.instruction, '" }') SEPARATOR ', ') AS instructions,
           GROUP_CONCAT(DISTINCT urimg.image_url SEPARATOR ', ') AS images
       FROM user_recipes ur
       LEFT JOIN user_recipe_ingredients uri ON ur.id = uri.recipe_id
       LEFT JOIN user_cooking_instructions uci ON ur.id = uci.recipe_id
-      LEFT JOIN user_nutritional_content unc ON ur.id = unc.recipe_id
       LEFT JOIN user_recipe_images urimg ON ur.id = urimg.recipe_id
       WHERE ur.id = ? AND ur.user_id = ?
       GROUP BY ur.id;
@@ -741,34 +726,31 @@ router.get('/user-recipe/single-recipe/:id', isAuthenticated, (req, res) => {
 
       const recipe = results[0];
 
-      // ✅ Add the `id` field in the response
+      // ✅ Parse manually formatted JSON-like strings
       const formattedRecipe = {
-          id: recipe.id, // ✅ Include recipe ID
+          id: recipe.id,
           food_name: recipe.food_name,
           description: recipe.description,
           servings: parseInt(recipe.servings, 10) || 0,
           category: recipe.category,
-          ingredients: recipe.ingredients ? recipe.ingredients.split(' | ') : [],
-          quantities: recipe.ingredient_quantities ? recipe.ingredient_quantities.split(' | ') : [],
-          instructions: recipe.instructions ? recipe.instructions.split(' | ') : [],
-          nutritional_content: recipe.nutritional_content
-              ? recipe.nutritional_content.split(' | ').map((item) => {
-                  const [name, amount] = item.split(':');
-                  return { name: name.trim(), amount: amount.trim() };
-              })
+          ingredients: recipe.ingredients ? JSON.parse(`[${recipe.ingredients}]`) : [],
+          instructions: recipe.instructions
+              ? JSON.parse(`[${recipe.instructions}]`).map(instr => `${instr.step_number}. ${instr.instruction}`)
               : [],
           total_cook_time: recipe.total_cook_time,
           difficulty: recipe.difficulty,
           preparation_tips: recipe.preparation_tips,
           nutritional_paragraph: recipe.nutritional_paragraph,
-          images: recipe.images 
-              ? recipe.images.split(', ').map(img => `http://192.168.19.245:6000${img}`)
+          images: recipe.images
+              ? recipe.images.split(', ').map(img => `http://192.168.111.245:6000${img}`)
               : []
       };
 
       res.send(formattedRecipe);
   });
 });
+
+
 
 
 // Route to search recipes by food name for the authenticated user
@@ -851,7 +833,6 @@ router.delete('/user-recipe/delete-recipe/:id', isAuthenticated, (req, res) => {
     const deleteQueries = [
       `DELETE FROM user_recipe_ingredients WHERE recipe_id = ?`,
       `DELETE FROM user_cooking_instructions WHERE recipe_id = ?`,
-      `DELETE FROM user_nutritional_content WHERE recipe_id = ?`,
       `DELETE FROM user_recipe_images WHERE recipe_id = ?`,
       `DELETE FROM user_recipes WHERE id = ?`
     ];
