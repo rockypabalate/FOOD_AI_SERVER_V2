@@ -1,6 +1,6 @@
-const db = require("../database/db");
+const { promisePool } = require("../database/db");
 
-const isAuthenticated = (req, res, next) => {
+const isAuthenticated = async (req, res, next) => {
     const authHeader = req.headers["authorization"];
 
     if (!authHeader) {
@@ -14,36 +14,34 @@ const isAuthenticated = (req, res, next) => {
 
     const sessionId = parts[1];
 
-    if (!req.session || !req.sessionStore) {  // Ensure session is initialized
+    if (!req.session || !req.sessionStore) {
         return res.status(500).send({ error: "Session store not initialized" });
     }
 
-    req.sessionStore.get(sessionId, (err, session) => {
+    req.sessionStore.get(sessionId, async (err, session) => {
         if (err) {
             console.error("Error retrieving session:", err);
             return res.status(500).send({ error: "Internal server error" });
         }
 
-        if (!session || !session.user || !session.user.email) { 
+        if (!session || !session.user || !session.user.email) {
             return res.status(401).send({ error: "Invalid session or session expired" });
         }
-        
-        // Validate user existence
-        const query = "SELECT id FROM users WHERE email = ?";
-        db.query(query, [session.user.email], (err, results) => {
-            if (err) {
-                console.error("Database error:", err);
-                return res.status(500).send({ error: "Failed to verify user" });
-            }
+
+        try {
+            const query = "SELECT id FROM users WHERE email = ?";
+            const [results] = await promisePool.query(query, [session.user.email]);
 
             if (results.length === 0) {
                 return res.status(401).send({ error: "User not found" });
             }
 
-            // Attach user data to req.user for downstream use
             req.user = { id: results[0].id, email: session.user.email };
             next();
-        });
+        } catch (error) {
+            console.error("Database error:", error);
+            return res.status(500).send({ error: "Failed to verify user" });
+        }
     });
 };
 
