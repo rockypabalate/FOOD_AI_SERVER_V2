@@ -208,6 +208,84 @@ router.get('/featured', async (req, res) => {
   }
 });
 
+router.get('/popular', async (req, res) => {
+  try {
+    // Query to fetch the most liked and saved recipes
+    const popularQuery = `
+      SELECT 
+        fi.id AS food_id,
+        fi.food_name,
+        fi.description,
+        fi.serving_size,
+        fi.total_cook_time,
+        fi.difficulty,
+        fi.category,
+        fi.views,
+        fi.likes,
+        fi.preparation_tips,
+        fi.nutritional_paragraph,
+        fi.author, 
+        fi.recipe_featured,
+        (SELECT COUNT(*) FROM saved_recipes sr WHERE sr.food_id = fi.id) AS saves,
+        (
+            SELECT image_url FROM food_images 
+            WHERE food_images.food_id = fi.id 
+            LIMIT 1
+        ) AS image_url
+      FROM food_information fi
+      ORDER BY likes DESC, saves DESC
+      LIMIT 10;
+    `;
+
+    const [popularResults] = await promisePool.query(popularQuery);
+
+    if (popularResults.length === 0) {
+      return res.status(404).json({ error: "No popular recipes found" });
+    }
+
+    // Fetch images separately
+    const imageQuery = `SELECT food_id, image_url, caption FROM food_images`;
+    const [imageResults] = await promisePool.query(imageQuery);
+
+    // Group images by food_id
+    const foodImagesMap = {};
+    imageResults.forEach(image => {
+      if (!foodImagesMap[image.food_id]) {
+        foodImagesMap[image.food_id] = [];
+      }
+      foodImagesMap[image.food_id].push({
+        image_url: `https://food-ai-server-v2.onrender.com${image.image_url}`,
+        caption: image.caption || null
+      });
+    });
+
+    // Format response
+    const formattedResults = popularResults.map(food => ({
+      id: food.food_id,
+      food_name: food.food_name,
+      description: food.description,
+      serving_size: food.serving_size,
+      total_cook_time: food.total_cook_time || null,
+      difficulty: food.difficulty || null,
+      category: food.category || null,
+      views: food.views || 0,
+      likes: food.likes || 0,
+      saves: food.saves || 0,
+      preparation_tips: food.preparation_tips || null,
+      nutritional_paragraph: food.nutritional_paragraph || null,
+      author: food.author || null,
+      recipe_featured: food.recipe_featured || '0',
+      images: foodImagesMap[food.food_id] || []
+    }));
+
+    res.json(formattedResults);
+  } catch (error) {
+    console.error("Error fetching popular recipes:", error);
+    res.status(500).json({ error: "Database error while fetching popular recipes" });
+  }
+});
+
+
 
   // Route to get food info by ID
 router.get('/get-recipe/:id', async (req, res) => {
