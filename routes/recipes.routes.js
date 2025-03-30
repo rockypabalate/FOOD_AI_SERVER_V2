@@ -55,29 +55,31 @@ router.get('/all', async (req, res) => {
   try {
       // Fetch all food information first
       const foodQuery = `
-          SELECT 
-              fi.id AS food_id,
-              fi.food_name,
-              fi.description,
-              fi.serving_size,
-              fi.total_cook_time,
-              fi.difficulty,
-              fi.category,
-              fi.views,
-              fi.likes,
-              fi.preparation_tips,
-              fi.nutritional_paragraph,
-              fi.author, 
-              fi.recipe_featured,
-              GROUP_CONCAT(DISTINCT ri.ingredient_name SEPARATOR ', ') AS ingredients,
-              GROUP_CONCAT(DISTINCT ri.quantity SEPARATOR ', ') AS ingredient_quantities,
-              GROUP_CONCAT(DISTINCT ci.step_number, '. ', ci.instruction SEPARATOR ' | ') AS instructions,
-              GROUP_CONCAT(DISTINCT nc.nutrient_name, ': ', nc.amount SEPARATOR ', ') AS nutritional_content
-          FROM food_information fi
-          LEFT JOIN recipe_ingredients ri ON fi.id = ri.food_id
-          LEFT JOIN cooking_instructions ci ON fi.id = ci.food_id
-          LEFT JOIN nutritional_content nc ON fi.id = nc.food_id
-          GROUP BY fi.id;
+         SELECT 
+          fi.id AS food_id,
+          fi.food_name,
+          fi.description,
+          fi.serving_size,
+          fi.total_cook_time,
+          fi.difficulty,
+          fi.category,
+          fi.views,
+          fi.likes,
+          fi.preparation_tips,
+          fi.nutritional_paragraph,
+          fi.author, 
+          fi.recipe_featured,
+          (
+              SELECT image_url FROM food_images 
+              WHERE food_images.food_id = fi.id 
+              LIMIT 1  -- Only fetch one image per food
+          ) AS image_url
+      FROM food_information fi
+      LEFT JOIN recipe_ingredients ri ON fi.id = ri.food_id
+      LEFT JOIN cooking_instructions ci ON fi.id = ci.food_id
+      LEFT JOIN nutritional_content nc ON fi.id = nc.food_id
+      GROUP BY fi.id;
+
       `;
 
       const [foodResults] = await promisePool.query(foodQuery);
