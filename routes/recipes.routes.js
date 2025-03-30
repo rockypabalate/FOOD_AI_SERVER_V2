@@ -51,45 +51,59 @@ router.get('/recipe-name-search', async (req, res) => {
 
   
 
-    router.get('/all', async (req, res) => {
+router.get('/all', async (req, res) => {
+  try {
+      // Fetch all food information first
       const foodQuery = `
-        SELECT 
-          fi.id AS food_id,
-          fi.food_name,
-          fi.description,
-          fi.serving_size,
-          fi.total_cook_time,
-          fi.difficulty,
-          fi.category,
-          fi.views,
-          fi.likes,
-          fi.preparation_tips,
-          fi.nutritional_paragraph,
-          fi.author, 
-          fi.recipe_featured,
-          GROUP_CONCAT(DISTINCT ri.ingredient_name SEPARATOR ', ') AS ingredients,
-          GROUP_CONCAT(DISTINCT ri.quantity SEPARATOR ', ') AS ingredient_quantities,
-          GROUP_CONCAT(DISTINCT ci.step_number, '. ', ci.instruction SEPARATOR ' | ') AS instructions,
-          GROUP_CONCAT(DISTINCT nc.nutrient_name, ': ', nc.amount SEPARATOR ', ') AS nutritional_content,
-          fi_img.image_url,
-          fi_img.caption
-        FROM food_information fi
-        LEFT JOIN recipe_ingredients ri ON fi.id = ri.food_id
-        LEFT JOIN cooking_instructions ci ON fi.id = ci.food_id
-        LEFT JOIN nutritional_content nc ON fi.id = nc.food_id
-        LEFT JOIN food_images fi_img ON fi.id = fi_img.food_id
-        GROUP BY fi.id;
+          SELECT 
+              fi.id AS food_id,
+              fi.food_name,
+              fi.description,
+              fi.serving_size,
+              fi.total_cook_time,
+              fi.difficulty,
+              fi.category,
+              fi.views,
+              fi.likes,
+              fi.preparation_tips,
+              fi.nutritional_paragraph,
+              fi.author, 
+              fi.recipe_featured,
+              GROUP_CONCAT(DISTINCT ri.ingredient_name SEPARATOR ', ') AS ingredients,
+              GROUP_CONCAT(DISTINCT ri.quantity SEPARATOR ', ') AS ingredient_quantities,
+              GROUP_CONCAT(DISTINCT ci.step_number, '. ', ci.instruction SEPARATOR ' | ') AS instructions,
+              GROUP_CONCAT(DISTINCT nc.nutrient_name, ': ', nc.amount SEPARATOR ', ') AS nutritional_content
+          FROM food_information fi
+          LEFT JOIN recipe_ingredients ri ON fi.id = ri.food_id
+          LEFT JOIN cooking_instructions ci ON fi.id = ci.food_id
+          LEFT JOIN nutritional_content nc ON fi.id = nc.food_id
+          GROUP BY fi.id;
       `;
 
-      try {
-        // Use promise-based query execution
-        const [foodResults] = await promisePool.query(foodQuery);
+      const [foodResults] = await promisePool.query(foodQuery);
 
-        if (foodResults.length === 0) {
+      if (foodResults.length === 0) {
           return res.status(404).json({ error: "No food information found" });
-        }
+      }
 
-        const formattedResults = foodResults.map(food => ({
+      // Fetch images separately
+      const imageQuery = `SELECT food_id, image_url, caption FROM food_images`;
+      const [imageResults] = await promisePool.query(imageQuery);
+
+      // Group images by food_id
+      const foodImagesMap = {};
+      imageResults.forEach(image => {
+          if (!foodImagesMap[image.food_id]) {
+              foodImagesMap[image.food_id] = [];
+          }
+          foodImagesMap[image.food_id].push({
+              image_url: `https://food-ai-server-v2.onrender.com${image.image_url}`,
+              caption: image.caption || null
+          });
+      });
+
+      // Format response
+      const formattedResults = foodResults.map(food => ({
           id: food.food_id,
           food_name: food.food_name,
           description: food.description,
@@ -107,19 +121,15 @@ router.get('/recipe-name-search', async (req, res) => {
           ingredient_quantities: food.ingredient_quantities ? food.ingredient_quantities.split(', ') : [],
           instructions: food.instructions ? food.instructions.split(' | ') : [],
           nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
-          image_url: food.image_url ? `https://food-ai-server-v2.onrender.com${food.image_url}` : null,
-          caption: food.caption || null
-        }));
+          images: foodImagesMap[food.food_id] || [] // Return array of images
+      }));
 
-        res.json(formattedResults);
-      } catch (error) {
-        console.error("Error fetching all food information:", error);
-        res.status(500).json({ error: "Database error" });
-      }
-    });
-
-
-
+      res.json(formattedResults);
+  } catch (error) {
+      console.error("Error fetching all food information:", error);
+      res.status(500).json({ error: "Database error" });
+  }
+});
 
   // Route to get food info by ID
 router.get('/get-recipe/:id', async (req, res) => {
