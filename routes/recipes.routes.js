@@ -287,7 +287,7 @@ router.get('/featured', async (req, res) => {
 
 
 
-  // Route to get food info by ID
+// Route to get food info by ID
 router.get('/get-recipe/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -312,8 +312,7 @@ router.get('/get-recipe/:id', async (req, res) => {
       fi.nutritional_paragraph,
       fi.author,
       fi.recipe_featured,
-      GROUP_CONCAT(DISTINCT ri.ingredient_name SEPARATOR ', ') AS ingredients,
-      GROUP_CONCAT(DISTINCT ri.quantity SEPARATOR ', ') AS ingredient_quantities,
+      GROUP_CONCAT(CONCAT(ri.ingredient_name, '::', ri.quantity) SEPARATOR '||') AS ingredient_pairs,
       GROUP_CONCAT(DISTINCT ci.step_number, '. ', ci.instruction SEPARATOR ' | ') AS instructions,
       GROUP_CONCAT(DISTINCT nc.nutrient_name, ': ', nc.amount SEPARATOR ', ') AS nutritional_content
     FROM food_information fi
@@ -339,6 +338,19 @@ router.get('/get-recipe/:id', async (req, res) => {
     // Fetch food images
     const [imageResults] = await promisePool.query(imageQuery, [foodId]);
 
+    // Process ingredients and quantities from ingredient_pairs
+    let ingredients = [];
+    let ingredient_quantities = [];
+
+    if (food.ingredient_pairs) {
+      const pairs = food.ingredient_pairs.split('||');
+      pairs.forEach(pair => {
+        const [ingredient, quantity] = pair.split('::');
+        ingredients.push(ingredient?.trim());
+        ingredient_quantities.push(quantity?.trim());
+      });
+    }
+
     const formattedResult = {
       id: food.food_id,
       food_name: food.food_name,
@@ -353,8 +365,8 @@ router.get('/get-recipe/:id', async (req, res) => {
       nutritional_paragraph: food.nutritional_paragraph || null,
       author: food.author || null,
       recipe_featured: food.recipe_featured || '0',
-      ingredients: food.ingredients ? food.ingredients.split(', ') : [],
-      ingredient_quantities: food.ingredient_quantities ? food.ingredient_quantities.split(', ') : [],
+      ingredients,
+      ingredient_quantities,
       instructions: food.instructions ? food.instructions.split(' | ') : [],
       nutritional_content: food.nutritional_content ? food.nutritional_content.split(', ') : [],
       images: imageResults.map(img => ({
