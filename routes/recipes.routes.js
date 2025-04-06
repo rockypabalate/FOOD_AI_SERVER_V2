@@ -959,6 +959,56 @@ router.delete('/user-recipe/delete-recipe/:id', isAuthenticated, async (req, res
   }
 });
 
+// Check if recipe is already saved by the user
+router.get("/is-recipe-saved", isAuthenticated, async (req, res) => {
+  const { foodId } = req.query; // Get foodId from query parameters
+
+  if (!foodId || isNaN(parseInt(foodId, 10))) {
+    return res.status(400).json({ error: "Invalid or missing food ID" });
+  }
+
+  const userId = req.user.id;
+  const parsedFoodId = parseInt(foodId, 10);
+
+  try {
+    const [results] = await promisePool.query(
+      "SELECT * FROM user_saved_foods WHERE user_id = ? AND food_id = ?",
+      [userId, parsedFoodId]
+    );
+
+    const isSaved = results.length > 0;
+    res.json({ isSaved });
+  } catch (error) {
+    console.error("Error checking saved recipe:", error);
+    res.status(500).json({ error: "Database error while checking saved recipe" });
+  }
+});
+
+// Check if recipe is already liked by the user
+router.get("/is-recipe-liked", isAuthenticated, async (req, res) => {
+  const { foodId } = req.query; // Get foodId from query parameters
+
+  if (!foodId || isNaN(parseInt(foodId, 10))) {
+    return res.status(400).json({ error: "Invalid or missing food ID" });
+  }
+
+  const userId = req.user.id;
+  const parsedFoodId = parseInt(foodId, 10);
+
+  try {
+    const [results] = await promisePool.query(
+      "SELECT * FROM food_likes WHERE user_id = ? AND food_id = ?",
+      [userId, parsedFoodId]
+    );
+
+    const isLiked = results.length > 0;
+    res.json({ isLiked });
+  } catch (error) {
+    console.error("Error checking liked recipe:", error);
+    res.status(500).json({ error: "Database error while checking liked recipe" });
+  }
+});
+
 
 // Export the router
 module.exports = router;
