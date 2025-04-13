@@ -7,7 +7,6 @@ const { promisePool } = require('../database/db');
 router.get('/recipe-name-search', async (req, res) => {
   const { food_name } = req.query;
 
-  // Validate the input
   if (!food_name || typeof food_name !== 'string') {
     return res.status(400).json({ error: "Invalid or missing 'food_name' query parameter" });
   }
@@ -19,21 +18,19 @@ router.get('/recipe-name-search', async (req, res) => {
       fi.description,
       fi.category
     FROM food_information fi
-    WHERE fi.food_name LIKE ?
+    WHERE LOWER(fi.food_name) = LOWER(?)
     GROUP BY fi.id;
   `;
 
-  const searchTerm = `%${food_name}%`; // Use wildcard for partial matches
+  const searchTerm = food_name.trim(); // exact match, case-insensitive
 
   try {
-    // Use promise-based query execution
     const [searchResults] = await promisePool.query(searchQuery, [searchTerm]);
 
     if (searchResults.length === 0) {
       return res.status(404).json({ error: "No food items found matching the search criteria" });
     }
 
-    // Map results to include category in the response
     const formattedResults = searchResults.map(food => ({
       id: food.food_id,
       food_name: food.food_name,

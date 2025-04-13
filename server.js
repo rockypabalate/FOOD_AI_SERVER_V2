@@ -3,10 +3,10 @@ const path = require("path");
 const cors = require("cors");
 const session = require("express-session");
 const MySQLStore = require("express-mysql-session")(session);
-require("dotenv").config(); // Load environment variables
+require("dotenv").config(); 
 
-const { promisePool } = require("./database/db"); // Ensure promisePool is properly imported
-const sessionMiddleware = require("./middleware/session.middleware"); // Import session middleware
+const { promisePool } = require("./database/db"); 
+const sessionMiddleware = require("./middleware/session.middleware"); 
 
 const authRoutes = require("./routes/auth.routes");
 const imagesRoutes = require("./routes/images.routes");
