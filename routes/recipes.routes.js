@@ -309,7 +309,8 @@ router.get('/get-recipe/:id', async (req, res) => {
       fi.nutritional_paragraph,
       fi.author,
       fi.recipe_featured,
-      fi.link, 
+      fi.link,
+      fi.notes, 
       GROUP_CONCAT(DISTINCT CONCAT(ri.ingredient_name, ' - ', ri.quantity) SEPARATOR '|') AS ingredients_with_quantities,
       GROUP_CONCAT(DISTINCT ci.step_number, '. ', ci.instruction SEPARATOR ' | ') AS instructions,
       GROUP_CONCAT(DISTINCT nc.nutrient_name, ': ', nc.amount SEPARATOR ', ') AS nutritional_content
@@ -351,6 +352,7 @@ router.get('/get-recipe/:id', async (req, res) => {
       author: food.author || null,
       recipe_featured: food.recipe_featured || '0',
       link: food.link || null,
+      notes: food.notes || null,
       ingredients: food.ingredients_with_quantities
         ? food.ingredients_with_quantities.split('|').map(str => {
             const [name, quantity] = str.split(' - ');
