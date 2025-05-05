@@ -96,7 +96,7 @@ router.get('/all', async (req, res) => {
               foodImagesMap[image.food_id] = [];
           }
           foodImagesMap[image.food_id].push({
-              image_url: `https://food-ai-server-v2.onrender.com${image.image_url}`,
+              image_url: `https://food-ai-server-v2-ldxp.onrender.com${image.image_url}`,
               caption: image.caption || null
           });
       });
@@ -175,7 +175,7 @@ router.get('/featured', async (req, res) => {
               foodImagesMap[image.food_id] = [];
           }
           foodImagesMap[image.food_id].push({
-              image_url: `https://food-ai-server-v2.onrender.com${image.image_url}`,
+              image_url: `https://food-ai-server-v2-ldxp.onrender.com${image.image_url}`,
               caption: image.caption || null
           });
       });
@@ -251,7 +251,7 @@ router.get('/featured', async (req, res) => {
             foodImagesMap[image.food_id] = [];
           }
           foodImagesMap[image.food_id].push({
-            image_url: `https://food-ai-server-v2.onrender.com${image.image_url}`,
+            image_url: `https://food-ai-server-v2-ldxp.onrender.com${image.image_url}`,
             caption: image.caption || null
           });
         });
@@ -369,7 +369,7 @@ router.get('/get-recipe/:id', async (req, res) => {
         ? food.nutritional_content.split(', ').map(nutrient => nutrient.trim())
         : [],
       images: imageResults.map(img => ({
-        image_url: `https://food-ai-server-v2.onrender.com${img.image_url}`,
+        image_url: `https://food-ai-server-v2-ldxp.onrender.com${img.image_url}`,
         caption: img.caption || null
       }))
     };
@@ -467,7 +467,7 @@ router.get("/saved-by-user", isAuthenticated, async (req, res) => {
     // Map images by food_id for easier access
     const imagesByFoodId = imageResults.reduce((acc, image) => {
       acc[image.food_id] = {
-        image_url: `https://food-ai-server-v2.onrender.com${image.image_url}`,
+        image_url: `https://food-ai-server-v2-ldxp.onrender.com${image.image_url}`,
         caption: image.caption || null
       };
       return acc;
@@ -790,7 +790,7 @@ router.get('/user-recipe/all', isAuthenticated, async (req, res) => {
           total_cook_time: recipe.total_cook_time || null,
           difficulty: recipe.difficulty || null,
           images: recipe.images 
-              ? recipe.images.split(', ').map(img => `https://food-ai-server-v2.onrender.com${img}`) 
+              ? recipe.images.split(', ').map(img => `https://food-ai-server-v2-ldxp.onrender.com${img}`) 
               : [] // Format images with base URL
       }));
 
@@ -855,7 +855,7 @@ router.get('/user-recipe/single-recipe/:id', isAuthenticated, async (req, res) =
           preparation_tips: recipe.preparation_tips,
           nutritional_paragraph: recipe.nutritional_paragraph,
           images: recipe.images
-              ? recipe.images.split(', ').map(img => `https://food-ai-server-v2.onrender.com${img}`)
+              ? recipe.images.split(', ').map(img => `https://food-ai-server-v2-ldxp.onrender.com${img}`)
               : []
       };
 
