@@ -107,7 +107,7 @@ router.get("/current-user", isAuthenticated, async (req, res) => {
       }
 
       const userDetails = results[0];
-      const baseUrl = process.env.BASE_URL || 'https://food-ai-server-v2.onrender.com';
+      const baseUrl = process.env.BASE_URL || 'https://food-ai-server-v2-ldxp.onrender.com';
 
       const responseData = {
           user: {
